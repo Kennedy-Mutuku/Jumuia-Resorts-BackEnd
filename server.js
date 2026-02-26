@@ -30,6 +30,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/offers', require('./routes/offerRoutes'));
 app.use('/api/feedback', require('./routes/feedbackRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 // Port
 const PORT = process.env.PORT || 5000;
