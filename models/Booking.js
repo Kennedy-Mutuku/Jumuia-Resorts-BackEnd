@@ -10,9 +10,17 @@ const bookingSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    resortName: {
+        type: String,
+        required: true
+    },
     roomType: {
         type: String,
         required: true
+    },
+    packageType: {
+        type: String,
+        default: 'bnb'
     },
     checkIn: {
         type: Date,
@@ -27,6 +35,14 @@ const bookingSchema = new mongoose.Schema({
         children: { type: Number, default: 0 }
     },
     fullName: {
+        type: String,
+        required: true
+    },
+    firstName: {
+        type: String,
+        required: true
+    },
+    lastName: {
         type: String,
         required: true
     },
