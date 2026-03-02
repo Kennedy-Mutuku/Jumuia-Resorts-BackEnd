@@ -1,6 +1,6 @@
 const Booking = require('../models/Booking');
 const Feedback = require('../models/Feedback');
-const Transaction = require('../models/Transaction'); // Assuming this exists or will be needed for precise revenue
+// const Transaction = require('../models/Transaction'); // Assuming this exists or will be needed for precise revenue
 
 // @desc    Get dashboard statistics
 // @route   GET /api/stats

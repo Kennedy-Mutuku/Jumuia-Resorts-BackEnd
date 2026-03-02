@@ -25,7 +25,52 @@ const getBookings = async (req, res) => {
 // @access  Public
 const createBooking = async (req, res) => {
     try {
-        const newBooking = new Booking(req.body);
+        const resortNames = {
+            'limuru': 'Jumuia Limuru Country Home',
+            'kanamai': 'Jumuia Kanamai Beach Resort',
+            'kisumu': 'Jumuia Hotel Kisumu'
+        };
+
+        const bookingData = { ...req.body };
+
+        // Ensure bookingId exists
+        if (!bookingData.bookingId) {
+            bookingData.bookingId = `JUM-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+
+        // Ensure resortName exists
+        if (!bookingData.resortName && bookingData.resort) {
+            bookingData.resortName = resortNames[bookingData.resort] || 'Jumuia Resort';
+        }
+
+        // Map guestName/firstName/lastName/fullName
+        if (!bookingData.firstName && bookingData.guestName) {
+            const parts = bookingData.guestName.split(' ');
+            bookingData.firstName = parts[0] || 'Guest';
+            bookingData.lastName = parts.slice(1).join(' ') || 'Guest';
+            bookingData.fullName = bookingData.guestName;
+        } else if (!bookingData.fullName && bookingData.firstName && bookingData.lastName) {
+            bookingData.fullName = `${bookingData.firstName} ${bookingData.lastName}`;
+        } else if (!bookingData.fullName) {
+            bookingData.firstName = bookingData.firstName || 'Guest';
+            bookingData.lastName = bookingData.lastName || 'Guest';
+            bookingData.fullName = 'Guest User';
+        }
+
+        // Handle flat guests object vs nested
+        if (bookingData.adults !== undefined || bookingData.children !== undefined) {
+            bookingData.guests = {
+                adults: parseInt(bookingData.adults) || 1,
+                children: parseInt(bookingData.children) || 0
+            };
+        }
+
+        // Handle bank payment method mapping to card (assuming schema enum: mpesa, card, cash)
+        if (bookingData.paymentMethod === 'bank') {
+            bookingData.paymentMethod = 'card';
+        }
+
+        const newBooking = new Booking(bookingData);
         const savedBooking = await newBooking.save();
         res.status(201).json(savedBooking);
     } catch (error) {
