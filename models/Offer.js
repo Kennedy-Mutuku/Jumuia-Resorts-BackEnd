@@ -4,7 +4,8 @@ const offerSchema = new mongoose.Schema({
     id: {
         type: String,
         required: true,
-        unique: true
+        unique: true,
+        default: () => `OFFER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     },
     title: { type: String, required: true },
     description: { type: String, required: true },
