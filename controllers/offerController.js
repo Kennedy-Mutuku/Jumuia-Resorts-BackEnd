@@ -1,12 +1,22 @@
 const Offer = require('../models/Offer');
+const OfferClaim = require('../models/OfferClaim');
 
-// @desc    Get all offers (filters by active status/resort via query)
+// @desc    Get all offers (filters by resort + global)
 // @route   GET /api/offers
 const getOffers = async (req, res) => {
     try {
-        const query = {};
-        if (req.query.resort) query.resort = req.query.resort;
-        if (req.query.active !== undefined) query.active = req.query.active === 'true';
+        const { resort, active } = req.query;
+        let query = {};
+
+        if (active !== undefined) query.active = active === 'true';
+
+        if (resort && resort !== 'all') {
+            // Show offers specifically for this resort OR global offers
+            query.$or = [
+                { resort: resort },
+                { resort: 'global' }
+            ];
+        }
 
         const offers = await Offer.find(query).sort({ createdAt: -1 });
         res.json(offers);
@@ -19,33 +29,101 @@ const getOffers = async (req, res) => {
 // @route   POST /api/offers
 const createOffer = async (req, res) => {
     try {
-        const newOffer = new Offer(req.body);
+        const { title, description, price, discount, includes, image, validUntil, resort } = req.body;
+
+        const offerData = {
+            id: `OFFER-${Date.now()}`, // Simple unique ID
+            title,
+            description,
+            price,
+            discount,
+            includes,
+            image,
+            validUntil,
+            postedBy: req.user._id
+        };
+
+        // Role-based resort assignment
+        if (req.user.role === 'manager') {
+            // Managers can ONLY post to their assigned resort
+            const managerResort = req.user.properties?.[0];
+            if (!managerResort) {
+                return res.status(403).json({ message: "Manager has no assigned property" });
+            }
+            offerData.resort = managerResort;
+        } else {
+            // Admins/GMs can pick or set global
+            offerData.resort = resort || 'global';
+        }
+
+        const newOffer = new Offer(offerData);
         const savedOffer = await newOffer.save();
         res.status(201).json(savedOffer);
+    } catch (error) {
+        console.error('Create Offer Error:', error);
+        res.status(400).json({
+            message: error.name === 'ValidationError'
+                ? Object.values(error.errors).map(val => val.message).join(', ')
+                : error.message
+        });
+    }
+};
+
+// @desc    Claim an offer
+// @route   POST /api/offers/claim
+const claimOffer = async (req, res) => {
+    try {
+        const { offerId, resort, guestName, email, phone, message } = req.body;
+
+        const newClaim = new OfferClaim({
+            offer: offerId,
+            resort,
+            guestName,
+            email,
+            phone,
+            message
+        });
+
+        const savedClaim = await newClaim.save();
+        res.status(201).json(savedClaim);
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 };
 
-// @desc    Update offer
-// @route   PUT /api/offers/:id
-const updateOffer = async (req, res) => {
+// @desc    Get all claims (filtered by role)
+// @route   GET /api/offers/claims
+const getClaims = async (req, res) => {
     try {
-        const offer = await Offer.findById(req.params.id);
-        if (offer) {
-            offer.title = req.body.title || offer.title;
-            offer.description = req.body.description || offer.description;
-            offer.discount = req.body.discount || offer.discount;
-            offer.image = req.body.image || offer.image;
-            offer.validUntil = req.body.validUntil || offer.validUntil;
-            offer.resort = req.body.resort || offer.resort;
-            offer.active = req.body.active !== undefined ? req.body.active : offer.active;
+        let query = {};
 
-            const updatedOffer = await offer.save();
-            res.json(updatedOffer);
-        } else {
-            res.status(404).json({ message: 'Offer not found' });
+        if (req.user.role === 'manager') {
+            const managerResort = req.user.properties?.[0];
+            if (managerResort) {
+                query.resort = managerResort;
+            }
         }
+
+        const claims = await OfferClaim.find(query)
+            .populate('offer', 'title price resort')
+            .sort({ createdAt: -1 });
+
+        res.json(claims);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Update claim status
+// @route   PUT /api/offers/claims/:id
+const updateClaimStatus = async (req, res) => {
+    try {
+        const claim = await OfferClaim.findById(req.params.id);
+        if (!claim) return res.status(404).json({ message: 'Claim not found' });
+
+        claim.status = req.body.status || claim.status;
+        const updated = await claim.save();
+        res.json(updated);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -56,12 +134,10 @@ const updateOffer = async (req, res) => {
 const deleteOffer = async (req, res) => {
     try {
         const offer = await Offer.findById(req.params.id);
-        if (offer) {
-            await Offer.deleteOne({ _id: offer._id });
-            res.json({ message: 'Offer removed' });
-        } else {
-            res.status(404).json({ message: 'Offer not found' });
-        }
+        if (!offer) return res.status(404).json({ message: 'Offer not found' });
+
+        await Offer.deleteOne({ _id: offer._id });
+        res.json({ message: 'Offer removed' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -70,6 +146,8 @@ const deleteOffer = async (req, res) => {
 module.exports = {
     getOffers,
     createOffer,
-    updateOffer,
+    claimOffer,
+    getClaims,
+    updateClaimStatus,
     deleteOffer
 };

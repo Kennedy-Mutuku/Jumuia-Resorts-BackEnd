@@ -7,11 +7,12 @@ const getBookings = async (req, res) => {
     try {
         let filter = {};
 
-        // If user is a manager, they only see their assigned properties
+        // If user is a manager, they only see their assigned properties and exclude soft-deleted ones
         if (req.user.role === 'manager') {
             filter.resort = { $in: req.user.properties };
+            filter.deletedByBranch = { $ne: true };
         }
-        // General Manager sees all bookings (no filter)
+        // General Manager sees all bookings including soft-deleted ones
 
         const bookings = await Booking.find(filter).sort({ createdAt: -1 });
         res.json(bookings);
@@ -96,10 +97,11 @@ const getBookingById = async (req, res) => {
 
 // @desc    Update a booking
 // @route   PUT /api/bookings/:id
+// @desc    Update a booking
+// @route   PUT /api/bookings/:id
 // @access  Private (Admin/Manager)
 const updateBooking = async (req, res) => {
     try {
-        // We support ID as either Mongo _id or custom bookingId
         const query = req.params.id.startsWith('BOOK-') || req.params.id.startsWith('JUM-')
             ? { bookingId: req.params.id }
             : { _id: req.params.id };
@@ -110,7 +112,6 @@ const updateBooking = async (req, res) => {
             return res.status(404).json({ message: 'Booking not found' });
         }
 
-        // Ensure manager has rights to edit this resort
         if (req.user.role === 'manager' && !req.user.properties.includes(booking.resort)) {
             return res.status(403).json({ message: 'Not authorized to update this property' });
         }
@@ -127,9 +128,51 @@ const updateBooking = async (req, res) => {
     }
 };
 
+// @desc    Delete a booking
+// @route   DELETE /api/bookings/:id
+// @access  Private (Admin/Manager)
+const deleteBooking = async (req, res) => {
+    try {
+        const query = req.params.id.startsWith('BOOK-') || req.params.id.startsWith('JUM-')
+            ? { bookingId: req.params.id }
+            : { _id: req.params.id };
+
+        const booking = await Booking.findOne(query);
+
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        // Branch Manager logic: Soft Delete
+        if (req.user.role === 'manager') {
+            if (!req.user.properties.includes(booking.resort)) {
+                return res.status(403).json({ message: 'Not authorized to delete this property booking' });
+            }
+
+            booking.deletedByBranch = true;
+            booking.deletedByAdminName = req.user.name || 'Branch Manager';
+            booking.deletedAt = new Date();
+            await booking.save();
+
+            return res.json({ message: 'Booking soft-deleted by branch manager', booking });
+        }
+
+        // General Manager logic: Permanent Delete
+        if (req.user.role === 'admin') {
+            await Booking.findOneAndDelete(query);
+            return res.json({ message: 'Booking permanently deleted by general manager' });
+        }
+
+        res.status(403).json({ message: 'Not authorized for this action' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getBookings,
     createBooking,
     getBookingById,
-    updateBooking
+    updateBooking,
+    deleteBooking
 };

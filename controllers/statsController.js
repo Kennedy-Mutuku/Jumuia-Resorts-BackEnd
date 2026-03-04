@@ -11,15 +11,17 @@ const getDashboardStats = async (req, res) => {
         let filter = {};
 
         // Role-based filtering
+        let statsFilter = { ...filter };
         if (req.user.role === 'manager') {
-            filter.resort = { $in: req.user.properties };
+            statsFilter.resort = { $in: req.user.properties };
+            statsFilter.deletedByBranch = { $ne: true };
         } else if (resort && resort !== 'all') {
-            filter.resort = resort;
+            statsFilter.resort = resort;
         }
 
         // 1. Aggregate Booking Stats
         const bookingStats = await Booking.aggregate([
-            { $match: filter },
+            { $match: statsFilter },
             {
                 $group: {
                     _id: "$resort",
@@ -34,7 +36,7 @@ const getDashboardStats = async (req, res) => {
 
         // 2. Aggregate Feedback Stats
         const feedbackStats = await Feedback.aggregate([
-            { $match: filter },
+            { $match: filter }, // Feedback doesn't have soft-delete yet, keeping 'filter'
             {
                 $group: {
                     _id: "$resort",
@@ -94,15 +96,103 @@ const getDashboardStats = async (req, res) => {
             stats.global.avgRating = Math.round((totalRatingSum / totalRatingCount) * 10) / 10;
         }
 
-        // Simplified Occupancy (based on arbitrary capacity for now)
-        const capacity = { limuru: 50, kanamai: 80, kisumu: 100 };
-        let totalOccSum = 0;
-        properties.forEach(p => {
-            const occ = Math.round((stats.properties[p].bookings / (capacity[p] || 50)) * 100);
-            stats.properties[p].occupancy = Math.min(occ, 100);
-            totalOccSum += stats.properties[p].occupancy;
+        // --- 4. Revenue History - Monthly (Last 6 months) ---
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+        sixMonthsAgo.setDate(1);
+        sixMonthsAgo.setHours(0, 0, 0, 0);
+
+        const monthlyRaw = await Booking.aggregate([
+            { $match: { ...statsFilter, createdAt: { $gte: sixMonthsAgo } } },
+            {
+                $group: {
+                    _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" }, resort: "$resort" },
+                    revenue: { $sum: "$totalAmount" }
+                }
+            },
+            { $sort: { "_id.year": 1, "_id.month": 1 } }
+        ]);
+
+        // --- 5. Revenue History - Weekly (Last 8 weeks) ---
+        const eightWeeksAgo = new Date();
+        eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 55);
+        eightWeeksAgo.setHours(0, 0, 0, 0);
+
+        const weeklyRaw = await Booking.aggregate([
+            { $match: { ...statsFilter, createdAt: { $gte: eightWeeksAgo } } },
+            {
+                $group: {
+                    _id: { week: { $week: "$createdAt" }, year: { $year: "$createdAt" }, resort: "$resort" },
+                    revenue: { $sum: "$totalAmount" }
+                }
+            },
+            { $sort: { "_id.year": 1, "_id.week": 1 } }
+        ]);
+
+        // --- 6. Revenue History - Daily (Last 14 days) ---
+        const fourteenDaysAgo = new Date();
+        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 13);
+        fourteenDaysAgo.setHours(0, 0, 0, 0);
+
+        const dailyRaw = await Booking.aggregate([
+            { $match: { ...statsFilter, createdAt: { $gte: fourteenDaysAgo } } },
+            {
+                $group: {
+                    _id: { day: { $dayOfMonth: "$createdAt" }, month: { $month: "$createdAt" }, year: { $year: "$createdAt" }, resort: "$resort" },
+                    revenue: { $sum: "$totalAmount" }
+                }
+            },
+            { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } }
+        ]);
+
+        const properties_list = ['limuru', 'kanamai', 'kisumu'];
+
+        // Months Generator
+        const months = [];
+        for (let i = 0; i < 6; i++) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - (5 - i));
+            const obj = { name: d.toLocaleString('default', { month: 'short' }), month: d.getMonth() + 1, year: d.getFullYear() };
+            properties_list.forEach(p => obj[p] = 0);
+            months.push(obj);
+        }
+        monthlyRaw.forEach(item => {
+            const entry = months.find(m => m.month === item._id.month && m.year === item._id.year);
+            if (entry) entry[item._id.resort] = item.revenue;
         });
-        stats.global.totalOccupancy = Math.round(totalOccSum / properties.length);
+
+        // Weeks Generator
+        const weeks = [];
+        for (let i = 0; i < 8; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - (7 * (7 - i)));
+            // Simple week calculation
+            const firstJan = new Date(d.getFullYear(), 0, 1);
+            const w = Math.ceil((((d - firstJan) / 86400000) + firstJan.getDay() + 1) / 7);
+            const obj = { name: `Wk ${w}`, week: w, year: d.getFullYear() };
+            properties_list.forEach(p => obj[p] = 0);
+            weeks.push(obj);
+        }
+        weeklyRaw.forEach(item => {
+            const entry = weeks.find(w => w.week === item._id.week && w.year === item._id.year);
+            if (entry) entry[item._id.resort] = item.revenue;
+        });
+
+        // Days Generator
+        const days = [];
+        for (let i = 0; i < 14; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - (13 - i));
+            const obj = { name: d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }), day: d.getDate(), month: d.getMonth() + 1, year: d.getFullYear() };
+            properties_list.forEach(p => obj[p] = 0);
+            days.push(obj);
+        }
+        dailyRaw.forEach(item => {
+            const entry = days.find(d => d.day === item._id.day && d.month === item._id.month && d.year === item._id.year);
+            if (entry) entry[item._id.resort] = item.revenue;
+        });
+
+        stats.revenueHistory = { months, weeks, days };
 
         res.json(stats);
     } catch (error) {

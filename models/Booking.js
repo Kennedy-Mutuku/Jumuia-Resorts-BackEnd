@@ -118,6 +118,18 @@ const bookingSchema = new mongoose.Schema({
     source: {
         type: String,
         default: 'website'
+    },
+    deletedByBranch: {
+        type: Boolean,
+        default: false
+    },
+    deletedByAdminName: {
+        type: String,
+        default: null
+    },
+    deletedAt: {
+        type: Date,
+        default: null
     }
 }, {
     timestamps: true

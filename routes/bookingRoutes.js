@@ -9,6 +9,7 @@ router.route('/')
 
 router.route('/:id')
     .get(protect, getBookingById)
-    .put(protect, updateBooking);
+    .put(protect, updateBooking)
+    .delete(protect, deleteBooking);
 
 module.exports = router;

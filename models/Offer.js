@@ -6,34 +6,16 @@ const offerSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    title: {
-        type: String,
-        required: true
-    },
-    description: {
-        type: String,
-        required: true
-    },
-    discount: {
-        type: String,
-        required: true
-    },
-    image: {
-        type: String,
-        required: true
-    },
-    validUntil: {
-        type: String,
-        required: true
-    },
-    resort: {
-        type: String,
-        required: true
-    },
-    active: {
-        type: Boolean,
-        default: true
-    }
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    price: { type: Number },
+    discount: { type: Number }, // Changed to Number for calculations
+    includes: [{ type: String }],
+    image: { type: String, required: true },
+    validUntil: { type: Date, required: true },
+    resort: { type: String, required: true, default: 'global' },
+    postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    active: { type: Boolean, default: true }
 }, {
     timestamps: true
 });
