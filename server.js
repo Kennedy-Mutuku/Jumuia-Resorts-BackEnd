@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -7,8 +8,8 @@ const connectDB = require('./config/db');
 // Load environment variables
 dotenv.config();
 
-// Connect to Database
-connectDB();
+// Connect to Database - Handled async after server start
+// connectDB();
 
 const app = express();
 
@@ -28,6 +29,19 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json());
+
+// DB Health Check Middleware - Fail fast if DB is disconnected
+const dbCheck = (req, res, next) => {
+    if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+            message: 'Database connection is currently unavailable. Please ensure your local MongoDB service is running.'
+        });
+    }
+    next();
+};
+
+// Use dbCheck for all API routes that require DB access
+app.use('/api', dbCheck);
 
 if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'));
@@ -60,6 +74,12 @@ app.use((err, req, res, next) => {
 });
 
 const seedAdmin = async () => {
+    // Check if connected
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('Skipping seeder: Database not connected');
+        return;
+    }
+
     try {
         const User = require('./models/User');
         const adminExists = await User.findOne({ email: 'generalmanager@jumuiaresorts.com' });
@@ -78,7 +98,15 @@ const seedAdmin = async () => {
     }
 };
 
-app.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+// Use a self-invoking function to avoid top-level await if needed, 
+// though we just want it to run in background.
+connectDB().then(() => {
     seedAdmin();
 });
+
+
+app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+});
+
+// Trigger nodemon restart

@@ -30,13 +30,34 @@ const bookingSchema = new mongoose.Schema({
         type: Date,
         required: true
     },
+    nights: {
+        type: Number,
+        default: 1
+    },
+    // Legacy nested guests field (kept for backward compat)
     guests: {
         adults: { type: Number, default: 1 },
         children: { type: Number, default: 0 }
     },
+    // Top-level guest counts (new)
+    adults: {
+        type: Number,
+        default: 1
+    },
+    childrenCount: {
+        type: Number,
+        default: 0
+    },
+    childrenDetails: [{
+        age: { type: Number },
+        sharing: { type: Boolean, default: true }
+    }],
     fullName: {
         type: String,
         required: true
+    },
+    guestName: {
+        type: String
     },
     firstName: {
         type: String,
@@ -54,13 +75,30 @@ const bookingSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    nationality: {
+        type: String,
+        default: 'kenyan'
+    },
+    guestType: {
+        type: String,
+        enum: ['residential', 'non-residential'],
+        default: 'residential'
+    },
     totalAmount: {
         type: Number,
         required: true
     },
+    currency: {
+        type: String,
+        default: 'KES'
+    },
+    breakdown: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+    },
     paymentMethod: {
         type: String,
-        enum: ['mpesa', 'card', 'cash'],
+        enum: ['mpesa', 'card', 'cash', 'bank', 'pay-on-arrival'],
         default: 'mpesa'
     },
     paymentStatus: {
@@ -72,6 +110,10 @@ const bookingSchema = new mongoose.Schema({
         type: String,
         enum: ['pending', 'confirmed', 'cancelled', 'completed'],
         default: 'pending'
+    },
+    specialRequests: {
+        type: String,
+        default: ''
     },
     source: {
         type: String,

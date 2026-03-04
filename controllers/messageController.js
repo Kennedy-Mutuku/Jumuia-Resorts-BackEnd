@@ -5,7 +5,20 @@ const Message = require('../models/Message');
 // @access  Public
 const getMessages = async (req, res) => {
     try {
-        const messages = await Message.find().sort({ createdAt: -1 });
+        let query = {};
+
+        if (req.user.role === 'manager') {
+            query = {
+                $or: [
+                    { resort: { $in: req.user.properties } },
+                    { resort: "" }
+                ]
+            };
+        } else if (req.user.role === 'staff') {
+            query = { resort: { $in: req.user.properties } };
+        }
+
+        const messages = await Message.find(query).sort({ createdAt: -1 });
         res.json(messages);
     } catch (error) {
         console.error(error);
@@ -15,15 +28,24 @@ const getMessages = async (req, res) => {
 
 // @desc    Get single message
 // @route   GET /api/messages/:id
-// @access  Public
+// @access  Private
 const getMessageById = async (req, res) => {
     try {
         const message = await Message.findById(req.params.id);
-        if (message) {
-            res.json(message);
-        } else {
-            res.status(404).json({ message: 'Message not found' });
+
+        if (!message) {
+            return res.status(404).json({ message: 'Message not found' });
         }
+
+        // Access check
+        if (req.user.role !== 'general-manager') {
+            const hasAccess = req.user.properties.includes(message.resort) || (req.user.role === 'manager' && message.resort === "");
+            if (!hasAccess) {
+                return res.status(403).json({ message: 'Not authorized to view this message' });
+            }
+        }
+
+        res.json(message);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
@@ -40,7 +62,7 @@ const createMessage = async (req, res) => {
             lastName: req.body.lastName,
             email: req.body.email,
             phone: req.body.phone,
-            resort: req.body.resort,
+            resort: req.body.resort || "",
             subject: req.body.subject,
             message: req.body.message,
             ip: req.body.ip,
@@ -67,16 +89,24 @@ const updateMessage = async (req, res) => {
     try {
         const message = await Message.findById(req.params.id);
 
-        if (message) {
-            message.status = req.body.status || message.status;
-            message.read = req.body.read !== undefined ? req.body.read : message.read;
-            message.responded = req.body.responded !== undefined ? req.body.responded : message.responded;
-
-            const updatedMessage = await message.save();
-            res.json(updatedMessage);
-        } else {
-            res.status(404).json({ message: 'Message not found' });
+        if (!message) {
+            return res.status(404).json({ message: 'Message not found' });
         }
+
+        // Access check
+        if (req.user.role !== 'general-manager') {
+            const hasAccess = req.user.properties.includes(message.resort) || (req.user.role === 'manager' && message.resort === "");
+            if (!hasAccess) {
+                return res.status(403).json({ message: 'Not authorized to update this message' });
+            }
+        }
+
+        message.status = req.body.status || message.status;
+        message.read = req.body.read !== undefined ? req.body.read : message.read;
+        message.responded = req.body.responded !== undefined ? req.body.responded : message.responded;
+
+        const updatedMessage = await message.save();
+        res.json(updatedMessage);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
@@ -90,12 +120,20 @@ const deleteMessage = async (req, res) => {
     try {
         const message = await Message.findById(req.params.id);
 
-        if (message) {
-            await Message.deleteOne({ _id: message._id });
-            res.json({ message: 'Message removed' });
-        } else {
-            res.status(404).json({ message: 'Message not found' });
+        if (!message) {
+            return res.status(404).json({ message: 'Message not found' });
         }
+
+        // Access check
+        if (req.user.role !== 'general-manager') {
+            const hasAccess = req.user.properties.includes(message.resort) || (req.user.role === 'manager' && message.resort === "");
+            if (!hasAccess) {
+                return res.status(403).json({ message: 'Not authorized to delete this message' });
+            }
+        }
+
+        await Message.deleteOne({ _id: message._id });
+        res.json({ message: 'Message removed' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });

@@ -61,13 +61,13 @@ const createBooking = async (req, res) => {
         if (bookingData.adults !== undefined || bookingData.children !== undefined) {
             bookingData.guests = {
                 adults: parseInt(bookingData.adults) || 1,
-                children: parseInt(bookingData.children) || 0
+                children: parseInt(bookingData.childrenCount) || parseInt(bookingData.children) || 0
             };
         }
 
-        // Handle bank payment method mapping to card (assuming schema enum: mpesa, card, cash)
-        if (bookingData.paymentMethod === 'bank') {
-            bookingData.paymentMethod = 'card';
+        // Build guestName if not provided
+        if (!bookingData.guestName && bookingData.fullName) {
+            bookingData.guestName = bookingData.fullName;
         }
 
         const newBooking = new Booking(bookingData);
