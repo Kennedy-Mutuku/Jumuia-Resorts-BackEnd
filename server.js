@@ -110,4 +110,4 @@ app.listen(PORT, () => {
     console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
 
-// Trigger nodemon restart
+// Trigger redeploy - Fix validation once and for all
