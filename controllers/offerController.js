@@ -32,7 +32,6 @@ const createOffer = async (req, res) => {
         const { title, description, price, discount, includes, image, validUntil, resort } = req.body;
 
         const offerData = {
-            id: `OFFER-${Date.now()}`, // Simple unique ID
             title,
             description,
             price,

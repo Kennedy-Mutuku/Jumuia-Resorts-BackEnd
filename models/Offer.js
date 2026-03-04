@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const offerSchema = new mongoose.Schema({
-    id: {
+    offerId: {
         type: String,
         required: true,
         unique: true,
@@ -12,7 +12,7 @@ const offerSchema = new mongoose.Schema({
     price: { type: Number },
     discount: { type: Number }, // Changed to Number for calculations
     includes: [{ type: String }],
-    image: { type: String, required: true },
+    image: { type: String, required: false },
     validUntil: { type: Date, required: true },
     resort: { type: String, required: true, default: 'global' },
     postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
